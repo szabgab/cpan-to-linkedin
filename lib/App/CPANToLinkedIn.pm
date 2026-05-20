@@ -1,0 +1,231 @@
+package App::CPANToLinkedIn;
+
+use strict;
+use warnings;
+
+use Exporter 'import';
+use Getopt::Long qw(GetOptionsFromArray);
+use HTTP::Tiny;
+
+our $VERSION = '0.1';
+
+our @EXPORT_OK = qw(
+    create_metacpan_client
+    parse_args
+    releases_from_resultset
+    first_linkedin_profile_url
+    connection_status_from_search_html
+    run
+);
+
+sub parse_args {
+    my (@argv) = @_;
+
+    my %options = (
+        count      => 20,
+        user_agent => 'cpan-to-linkedin/0.1',
+    );
+
+    GetOptionsFromArray(
+        \@argv,
+        'count|n=i'              => \$options{count},
+        'linkedin-cookie=s'      => \$options{linkedin_cookie},
+        'linkedin-cookie-file=s' => \$options{linkedin_cookie_file},
+        'help'                   => \$options{help},
+    ) or die usage();
+
+    die "--count must be a positive integer\n" if $options{count} < 1;
+
+    $options{cookie_header} = _cookie_header(\%options);
+
+    return \%options;
+}
+
+sub usage {
+    return <<'END_USAGE';
+Usage: cpan-to-linkedin [--count N] [--linkedin-cookie COOKIE]
+       cpan-to-linkedin [--count N] [--linkedin-cookie-file FILE]
+
+Fetch the N most recent CPAN releases from MetaCPAN, then try to find each
+author on LinkedIn.
+
+Options:
+  --count, -n               Number of recent CPAN releases to inspect.
+                            Defaults to 20.
+  --linkedin-cookie         Raw LinkedIn Cookie header for authenticated
+                            searches. If omitted, the script still tries a
+                            direct LinkedIn search, but connection status is
+                            reported as "unknown".
+  --linkedin-cookie-file    File containing the raw LinkedIn Cookie header.
+  --help                    Show this help.
+END_USAGE
+}
+
+sub run {
+    my (@argv) = @_;
+    my $options = parse_args(@argv);
+
+    if ($options->{help}) {
+        print usage();
+        return 0;
+    }
+
+    my $http = HTTP::Tiny->new(
+        agent      => $options->{user_agent},
+        verify_SSL => 1,
+        timeout    => 30,
+        default_headers => {
+            Accept => 'application/json, text/html;q=0.9,*/*;q=0.8',
+        },
+    );
+    my $mcpan = create_metacpan_client();
+
+    my $releases = fetch_recent_releases($mcpan, $options->{count});
+    my %author_cache;
+
+    print join(
+        "\t",
+        qw(distribution author_id author_name linkedin_profile connection_status)
+    ), "\n";
+
+    for my $release (@{$releases}) {
+        my $author_id = $release->{author} // '';
+        my $author_name = $author_cache{$author_id} ||= fetch_author_name($mcpan, $author_id);
+        my $search_html = fetch_linkedin_search_html(
+            $http,
+            $author_name || $author_id,
+            $options->{cookie_header},
+        );
+        my $profile_url = first_linkedin_profile_url($search_html);
+        my $connection_status = 'not_found';
+
+        if ($profile_url) {
+            $connection_status = $options->{cookie_header}
+                ? connection_status_from_search_html($search_html)
+                : 'unknown';
+        }
+
+        print join(
+            "\t",
+            map { defined $_ ? $_ : '' } (
+                $release->{distribution},
+                $author_id,
+                $author_name,
+                ($profile_url || ''),
+                $connection_status,
+            )
+        ), "\n";
+    }
+
+    return 0;
+}
+
+sub create_metacpan_client {
+    eval { require MetaCPAN::Client; 1 }
+        or die "MetaCPAN::Client is required. Install it with: cpanm MetaCPAN::Client\n";
+
+    return MetaCPAN::Client->new();
+}
+
+sub fetch_recent_releases {
+    my ($mcpan, $count) = @_;
+    my $recent = $mcpan->recent($count);
+    return releases_from_resultset($recent);
+}
+
+sub releases_from_resultset {
+    my ($resultset) = @_;
+
+    my @packages;
+    while (my $release = $resultset->next) {
+        push @packages, {
+            distribution => $release->distribution,
+            author       => $release->author,
+            date         => $release->date,
+        };
+    }
+
+    return \@packages;
+}
+
+sub fetch_author_name {
+    my ($mcpan, $author_id) = @_;
+    return '' if !$author_id;
+
+    my $author = eval { $mcpan->author($author_id) };
+    return '' if !$author;
+
+    return $author->name || '';
+}
+
+sub fetch_linkedin_search_html {
+    my ($http, $query, $cookie_header) = @_;
+
+    my $url = 'https://www.linkedin.com/search/results/people/?keywords='
+        . _url_encode($query);
+
+    my %options;
+    if ($cookie_header) {
+        $options{headers} = {
+            Cookie => $cookie_header,
+        };
+    }
+
+    my $response = $http->get($url, \%options);
+    return '' unless $response->{success};
+
+    return $response->{content};
+}
+
+sub first_linkedin_profile_url {
+    my ($html) = @_;
+    return unless defined $html;
+
+    my $profile_path = qr{(?:[A-Za-z0-9._\-]|%[0-9A-Fa-f]{2})+};
+
+    while ($html =~ m{(?:href=|")((?:https?://(?:www\.)?linkedin\.com)?/in/$profile_path/?)(?![A-Za-z0-9._%\-])}g) {
+        my $candidate = $1;
+        $candidate = "https://www.linkedin.com$candidate" if $candidate =~ m{^/};
+        $candidate =~ s/&amp;/&/g;
+        return $candidate if $candidate =~ m{^https?://(?:www\.)?linkedin\.com/in/$profile_path/?$};
+    }
+
+    return;
+}
+
+sub connection_status_from_search_html {
+    my ($html) = @_;
+    return 'unknown' if !defined $html || $html eq '';
+
+    return 'connected' if $html =~ />\s*1st\s*</i;
+    return '2nd'       if $html =~ />\s*2nd\s*</i;
+    return '3rd+'      if $html =~ />\s*3rd\s*</i;
+    return 'out_of_network' if $html =~ /out of network/i;
+    return 'unknown';
+}
+
+sub _cookie_header {
+    my ($options) = @_;
+
+    return $options->{linkedin_cookie} if $options->{linkedin_cookie};
+
+    if ($options->{linkedin_cookie_file}) {
+        open my $fh, '<', $options->{linkedin_cookie_file}
+            or die "Could not open $options->{linkedin_cookie_file}: $!\n";
+        local $/ = undef;
+        my $cookie = <$fh>;
+        close $fh;
+        $cookie =~ s/\s+\z// if defined $cookie;
+        return $cookie;
+    }
+
+    return $ENV{LINKEDIN_COOKIE} || '';
+}
+
+sub _url_encode {
+    my ($value) = @_;
+    $value =~ s/([^A-Za-z0-9\-._~])/sprintf('%%%02X', ord($1))/ge;
+    return $value;
+}
+
+1;

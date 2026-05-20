@@ -2,9 +2,10 @@ use strict;
 use warnings;
 
 use FindBin qw($Bin);
+use lib "$Bin/../lib";
 use Test::More;
 
-require "$Bin/../script/cpan-to-linkedin";
+use App::CPANToLinkedIn;
 
 my $options = App::CPANToLinkedIn::parse_args();
 is $options->{count}, 20, 'default count is 20';
