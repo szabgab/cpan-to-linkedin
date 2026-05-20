@@ -9,14 +9,15 @@ use Test::More;
 
 use App::CPANToLinkedIn;
 
-my $lead_columns_format = "%-10s %-35s %-30s";
+my $lead_columns_format = "%-10s %-35s %-30s %-15s";
 my $lead_columns = sub {
-    my ($author_id, $distribution, $author_name) = @_;
+    my ($author_id, $distribution, $author_name, $connection_status) = @_;
     return sprintf(
         $lead_columns_format,
         ($author_id // ''),
         substr($distribution // '', 0, 35),
         ($author_name // ''),
+        ($connection_status // ''),
     );
 };
 
@@ -63,8 +64,8 @@ is scalar @lines, 3, 'prints header and two result rows';
 is(
     $lines[0],
     sprintf(
-        "${lead_columns_format}\tlinkedin_profile\tconnection_status",
-        qw(author_id distribution author_name)
+        "${lead_columns_format}\tlinkedin_profile",
+        qw(author_id distribution author_name connection_status)
     ),
     'prints expected fixed-width header',
 );
@@ -72,9 +73,8 @@ is(
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
     [
-        $lead_columns->('FOOBAR', 'Dist-Connected', 'Foo Bar'),
+        $lead_columns->('FOOBAR', 'Dist-Connected', 'Foo Bar', 'connected'),
         'https://www.linkedin.com/in/foobar',
-        'connected',
     ],
     'author listed in Connections.csv is reported connected with fixed-width lead columns',
 );
@@ -82,11 +82,10 @@ is_deeply(
 is_deeply(
     [ split /\t/, $lines[2], -1 ],
     [
-        $lead_columns->('SOMEONEELSE', 'Dist-Not-Connected', 'Different Person'),
-        '',
-        'not_found',
+        $lead_columns->('SOMEONEELSE', 'Dist-Not-Connected', 'Different Person', 'not_found'),
+        'https://www.linkedin.com/search/results/all/?keywords=Different+Person',
     ],
-    'author missing from Connections.csv is reported as not found with fixed-width lead columns',
+    'author missing from Connections.csv gets a LinkedIn search URL with fixed-width lead columns',
 );
 
 my $tempdir = tempdir(CLEANUP => 1);
@@ -128,9 +127,8 @@ die "Test failed during exclude.csv evaluation: $run_error" if $run_error;
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
     [
-        $lead_columns->('FOOBAR', 'Dist-Connected', 'Foo Bar'),
+        $lead_columns->('FOOBAR', 'Dist-Connected', 'Foo Bar', 'excluded'),
         '',
-        'excluded',
     ],
     'author listed in exclude.csv is skipped with fixed-width lead columns',
 );
