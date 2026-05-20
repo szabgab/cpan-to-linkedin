@@ -124,10 +124,10 @@ sub run {
     my %author_cache;
     my $excluded_author_ids = load_excluded_pause_ids('exclude.csv');
 
-    print join(
-        "\t",
-        qw(distribution author_id author_name linkedin_profile connection_status)
-    ), "\n";
+    print sprintf(
+        "%-10s %-35s %-30s\tlinkedin_profile\tconnection_status\n",
+        qw(author_id distribution author_name)
+    );
 
     for my $release (@{$releases}) {
         my $author_id = $release->{author} // '';
@@ -160,16 +160,16 @@ sub run {
             }
         }
 
-        print join(
-            "\t",
+        print sprintf(
+            "%-10s %-35s %-30s\t%s\t%s\n",
             map { defined $_ ? $_ : '' } (
-                $release->{distribution},
                 $author_id,
+                $release->{distribution},
                 $author_name,
                 ($profile_url || ''),
                 $connection_status,
             )
-        ), "\n";
+        );
     }
 
     return 0;

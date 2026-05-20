@@ -51,32 +51,31 @@ is scalar @lines, 3, 'prints header and two result rows';
 
 is(
     $lines[0],
-    "distribution\tauthor_id\tauthor_name\tlinkedin_profile\tconnection_status",
-    'prints expected TSV header',
+    sprintf(
+        "%-10s %-35s %-30s\tlinkedin_profile\tconnection_status",
+        qw(author_id distribution author_name)
+    ),
+    'prints expected fixed-width header',
 );
 
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
     [
-        'Dist-Connected',
-        'FOOBAR',
-        'Foo Bar',
+        sprintf("%-10s %-35s %-30s", 'FOOBAR', 'Dist-Connected', 'Foo Bar'),
         'https://www.linkedin.com/in/foobar',
         'connected',
     ],
-    'author listed in Connections.csv is reported connected',
+    'author listed in Connections.csv is reported connected with fixed-width lead columns',
 );
 
 is_deeply(
     [ split /\t/, $lines[2], -1 ],
     [
-        'Dist-Not-Connected',
-        'SOMEONEELSE',
-        'Different Person',
+        sprintf("%-10s %-35s %-30s", 'SOMEONEELSE', 'Dist-Not-Connected', 'Different Person'),
         '',
         'not_found',
     ],
-    'author missing from Connections.csv is reported as not found',
+    'author missing from Connections.csv is reported as not found with fixed-width lead columns',
 );
 
 my $tempdir = tempdir(CLEANUP => 1);
@@ -118,13 +117,11 @@ die "Test failed during exclude.csv evaluation: $run_error" if $run_error;
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
     [
-        'Dist-Connected',
-        'FOOBAR',
-        'Foo Bar',
+        sprintf("%-10s %-35s %-30s", 'FOOBAR', 'Dist-Connected', 'Foo Bar'),
         '',
         'excluded',
     ],
-    'author listed in exclude.csv is skipped',
+    'author listed in exclude.csv is skipped with fixed-width lead columns',
 );
 
 done_testing();
