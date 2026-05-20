@@ -162,9 +162,9 @@ sub run {
 
         printf(
             "%-10s %-35s %-30s\t%s\t%s\n",
-            substr($author_id // '', 0, 10),
+            ($author_id // ''),
             substr($release->{distribution} // '', 0, 35),
-            substr($author_name // '', 0, 30),
+            ($author_name // ''),
             ($profile_url // ''),
             ($connection_status // ''),
         );
