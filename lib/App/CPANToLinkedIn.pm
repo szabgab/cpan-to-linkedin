@@ -163,7 +163,10 @@ sub load_excluded_pause_ids {
     my %excluded;
 
     while (my $fields = $csv->getline($fh)) {
-        my $author_id = uc($fields->[0] // '');
+        my $author_id = $fields->[0] // '';
+        $author_id =~ s/^\s+//;
+        $author_id =~ s/\s+\z//;
+        $author_id = uc($author_id);
         next if !$author_id;
         $excluded{$author_id} = 1;
     }
