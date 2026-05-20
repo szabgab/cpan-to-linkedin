@@ -35,6 +35,13 @@ like $@, qr/Cannot use --linkedin-export together with/, 'dies when both --linke
 eval { App::CPANToLinkedIn::parse_args('--linkedin-export', '/tmp/export', '--linkedin-cookie-file', '/tmp/c') };
 like $@, qr/Cannot use --linkedin-export together with/, 'dies when both --linkedin-export and --linkedin-cookie-file are given';
 
+# Cookie without --linkedin-search → must die
+eval { App::CPANToLinkedIn::parse_args('--linkedin-cookie', 'tok') };
+like $@, qr/require --linkedin-search/, 'dies when --linkedin-cookie is given without --linkedin-search';
+
+eval { App::CPANToLinkedIn::parse_args('--linkedin-cookie-file', '/tmp/c') };
+like $@, qr/require --linkedin-search/, 'dies when --linkedin-cookie-file is given without --linkedin-search';
+
 {
     package Local::Release;
 

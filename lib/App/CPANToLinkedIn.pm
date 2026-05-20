@@ -41,17 +41,21 @@ sub parse_args {
     die "--count must be a positive integer\n" if $options{count} < 1;
 
     my $csv_mode      = defined $options{linkedin_export};
-    my $linkedin_mode = $options{linkedin_search}
-                        || defined $options{linkedin_cookie}
+    my $linkedin_mode = $options{linkedin_search};
+    my $has_cookie    = defined $options{linkedin_cookie}
                         || defined $options{linkedin_cookie_file};
+
+    die "Cannot use --linkedin-export together with --linkedin-search / --linkedin-cookie / --linkedin-cookie-file.\n"
+        . usage()
+        if !$options{help} && $csv_mode && ($linkedin_mode || $has_cookie);
+
+    die "--linkedin-cookie and --linkedin-cookie-file require --linkedin-search.\n"
+        . usage()
+        if !$options{help} && $has_cookie && !$linkedin_mode;
 
     die "Must specify exactly one workmode: --linkedin-export or --linkedin-search (with optional --linkedin-cookie / --linkedin-cookie-file).\n"
         . usage()
         unless $options{help} || $csv_mode || $linkedin_mode;
-
-    die "Cannot use --linkedin-export together with --linkedin-search / --linkedin-cookie / --linkedin-cookie-file.\n"
-        . usage()
-        if $csv_mode && $linkedin_mode;
 
     $options{cookie_header} = _cookie_header(\%options);
 
