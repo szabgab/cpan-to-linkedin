@@ -34,10 +34,24 @@ sub parse_args {
         'linkedin-cookie=s'      => \$options{linkedin_cookie},
         'linkedin-cookie-file=s' => \$options{linkedin_cookie_file},
         'linkedin-export=s'      => \$options{linkedin_export},
+        'linkedin-search'        => \$options{linkedin_search},
         'help'                   => \$options{help},
     ) or die usage();
 
     die "--count must be a positive integer\n" if $options{count} < 1;
+
+    my $csv_mode      = defined $options{linkedin_export};
+    my $linkedin_mode = $options{linkedin_search}
+                        || defined $options{linkedin_cookie}
+                        || defined $options{linkedin_cookie_file};
+
+    die "Must specify exactly one workmode: --linkedin-export or --linkedin-search (with optional --linkedin-cookie / --linkedin-cookie-file).\n"
+        . usage()
+        unless $options{help} || $csv_mode || $linkedin_mode;
+
+    die "Cannot use --linkedin-export together with --linkedin-search / --linkedin-cookie / --linkedin-cookie-file.\n"
+        . usage()
+        if $csv_mode && $linkedin_mode;
 
     $options{cookie_header} = _cookie_header(\%options);
 
@@ -46,12 +60,15 @@ sub parse_args {
 
 sub usage {
     return <<'END_USAGE';
-Usage: cpan-to-linkedin [--count N] [--linkedin-export DIR]
-       cpan-to-linkedin [--count N] [--linkedin-cookie COOKIE]
-       cpan-to-linkedin [--count N] [--linkedin-cookie-file FILE]
+Usage: cpan-to-linkedin [--count N] --linkedin-export DIR
+       cpan-to-linkedin [--count N] --linkedin-search [--linkedin-cookie COOKIE]
+       cpan-to-linkedin [--count N] --linkedin-search [--linkedin-cookie-file FILE]
 
-Fetch the N most recent CPAN releases from MetaCPAN, then try to find each
-author on LinkedIn.
+Exactly one workmode must be selected:
+  --linkedin-export DIR     Use the LinkedIn CSV export to look up connections.
+  --linkedin-search         Search the LinkedIn website directly.
+
+These two modes are mutually exclusive.
 
 Options:
   --count, -n               Number of recent CPAN releases to inspect.
@@ -60,11 +77,13 @@ Options:
                             files (e.g. Connections.csv). When provided, the
                             script looks up authors in the exported connections
                             instead of searching the LinkedIn website.
+  --linkedin-search         Search the LinkedIn website for each author.
+                            Connection status is reported as "unknown" unless
+                            a cookie is also provided.
   --linkedin-cookie         Raw LinkedIn Cookie header for authenticated
-                            searches. If omitted, the script still tries a
-                            direct LinkedIn search, but connection status is
-                            reported as "unknown".
-  --linkedin-cookie-file    File containing the raw LinkedIn Cookie header.
+                            searches (requires --linkedin-search).
+  --linkedin-cookie-file    File containing the raw LinkedIn Cookie header
+                            (requires --linkedin-search).
   --help                    Show this help.
 END_USAGE
 }
