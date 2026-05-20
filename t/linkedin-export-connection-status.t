@@ -9,6 +9,17 @@ use Test::More;
 
 use App::CPANToLinkedIn;
 
+my $lead_columns_format = "%-10s %-35s %-30s";
+my $lead_columns = sub {
+    my ($author_id, $distribution, $author_name) = @_;
+    return sprintf(
+        $lead_columns_format,
+        substr($author_id // '', 0, 10),
+        substr($distribution // '', 0, 35),
+        substr($author_name // '', 0, 30),
+    );
+};
+
 my @mock_releases = (
     {
         distribution => 'Dist-Connected',
@@ -52,7 +63,7 @@ is scalar @lines, 3, 'prints header and two result rows';
 is(
     $lines[0],
     sprintf(
-        "%-10s %-35s %-30s\tlinkedin_profile\tconnection_status",
+        "${lead_columns_format}\tlinkedin_profile\tconnection_status",
         qw(author_id distribution author_name)
     ),
     'prints expected fixed-width header',
@@ -61,7 +72,7 @@ is(
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
     [
-        sprintf("%-10s %-35s %-30s", 'FOOBAR', 'Dist-Connected', 'Foo Bar'),
+        $lead_columns->('FOOBAR', 'Dist-Connected', 'Foo Bar'),
         'https://www.linkedin.com/in/foobar',
         'connected',
     ],
@@ -71,7 +82,7 @@ is_deeply(
 is_deeply(
     [ split /\t/, $lines[2], -1 ],
     [
-        sprintf("%-10s %-35s %-30s", 'SOMEONEELSE', 'Dist-Not-Connected', 'Different Person'),
+        $lead_columns->('SOMEONEELSE', 'Dist-Not-Connected', 'Different Person'),
         '',
         'not_found',
     ],
@@ -117,7 +128,7 @@ die "Test failed during exclude.csv evaluation: $run_error" if $run_error;
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
     [
-        sprintf("%-10s %-35s %-30s", 'FOOBAR', 'Dist-Connected', 'Foo Bar'),
+        $lead_columns->('FOOBAR', 'Dist-Connected', 'Foo Bar'),
         '',
         'excluded',
     ],
