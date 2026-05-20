@@ -112,7 +112,7 @@ eval {
     1;
 } or $run_error = $@;
 chdir $cwd or die "Could not restore current directory to $cwd: $!";
-die $run_error if $run_error;
+die "Test failed during exclude.csv evaluation: $run_error" if $run_error;
 
 @lines = split /\n/, $stdout;
 is_deeply(
