@@ -139,6 +139,10 @@ sub run {
 
     for my $release (@{$releases}) {
         my $author_id = $release->{author} // '';
+        if ($author_id !~ /\S/) {
+            warn "Empty author_id for distribution '" . ($release->{distribution} // '') . "', skipping\n";
+            next;
+        }
         my $author_name = $author_cache{$author_id} ||= fetch_author_name($mcpan, $author_id);
         my ($profile_url, $connection_status);
 
