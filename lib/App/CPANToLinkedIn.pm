@@ -6,11 +6,13 @@ use warnings;
 use Exporter 'import';
 use Getopt::Long qw(GetOptionsFromArray);
 use HTTP::Tiny;
+use Text::CSV;
 
 our $VERSION = '0.1';
 
 our @EXPORT_OK = qw(
     create_metacpan_client
+    load_linkedin_connections
     parse_args
     releases_from_resultset
     first_linkedin_profile_url
@@ -31,6 +33,7 @@ sub parse_args {
         'count|n=i'              => \$options{count},
         'linkedin-cookie=s'      => \$options{linkedin_cookie},
         'linkedin-cookie-file=s' => \$options{linkedin_cookie_file},
+        'linkedin-export=s'      => \$options{linkedin_export},
         'help'                   => \$options{help},
     ) or die usage();
 
@@ -43,7 +46,8 @@ sub parse_args {
 
 sub usage {
     return <<'END_USAGE';
-Usage: cpan-to-linkedin [--count N] [--linkedin-cookie COOKIE]
+Usage: cpan-to-linkedin [--count N] [--linkedin-export DIR]
+       cpan-to-linkedin [--count N] [--linkedin-cookie COOKIE]
        cpan-to-linkedin [--count N] [--linkedin-cookie-file FILE]
 
 Fetch the N most recent CPAN releases from MetaCPAN, then try to find each
@@ -52,6 +56,10 @@ author on LinkedIn.
 Options:
   --count, -n               Number of recent CPAN releases to inspect.
                             Defaults to 20.
+  --linkedin-export         Path to the folder containing the LinkedIn export
+                            files (e.g. Connections.csv). When provided, the
+                            script looks up authors in the exported connections
+                            instead of searching the LinkedIn website.
   --linkedin-cookie         Raw LinkedIn Cookie header for authenticated
                             searches. If omitted, the script still tries a
                             direct LinkedIn search, but connection status is
@@ -80,6 +88,15 @@ sub run {
     );
     my $mcpan = create_metacpan_client();
 
+    my %connections_by_name;
+    if ($options->{linkedin_export}) {
+        my $connections = load_linkedin_connections($options->{linkedin_export});
+        for my $c (@$connections) {
+            my $name = lc(join(' ', grep { length $_ } $c->{first_name}, $c->{last_name}));
+            $connections_by_name{$name} = $c if $name;
+        }
+    }
+
     my $releases = fetch_recent_releases($mcpan, $options->{count});
     my %author_cache;
 
@@ -91,18 +108,30 @@ sub run {
     for my $release (@{$releases}) {
         my $author_id = $release->{author} // '';
         my $author_name = $author_cache{$author_id} ||= fetch_author_name($mcpan, $author_id);
-        my $search_html = fetch_linkedin_search_html(
-            $http,
-            $author_name || $author_id,
-            $options->{cookie_header},
-        );
-        my $profile_url = first_linkedin_profile_url($search_html);
-        my $connection_status = 'not_found';
+        my ($profile_url, $connection_status);
 
-        if ($profile_url) {
-            $connection_status = $options->{cookie_header}
-                ? connection_status_from_search_html($search_html)
-                : 'unknown';
+        if ($options->{linkedin_export}) {
+            my $entry = $connections_by_name{lc($author_name || '')};
+            if ($entry && $entry->{url}) {
+                $profile_url       = $entry->{url};
+                $connection_status = 'connected';
+            } else {
+                $connection_status = 'not_found';
+            }
+        } else {
+            my $search_html = fetch_linkedin_search_html(
+                $http,
+                $author_name || $author_id,
+                $options->{cookie_header},
+            );
+            $profile_url = first_linkedin_profile_url($search_html);
+            $connection_status = 'not_found';
+
+            if ($profile_url) {
+                $connection_status = $options->{cookie_header}
+                    ? connection_status_from_search_html($search_html)
+                    : 'unknown';
+            }
         }
 
         print join(
@@ -156,6 +185,55 @@ sub fetch_author_name {
     return '' if !$author;
 
     return $author->name || '';
+}
+
+sub load_linkedin_connections {
+    my ($folder) = @_;
+    my $file = "$folder/Connections.csv";
+
+    open my $fh, '<:encoding(UTF-8)', $file
+        or die "Could not open $file: $!\n";
+
+    # Skip preamble lines until we reach the real CSV header
+    my $header_line;
+    while (my $line = <$fh>) {
+        chomp $line;
+        if ($line =~ /^First Name,/) {
+            $header_line = $line;
+            last;
+        }
+    }
+    die "Could not find 'First Name' header in $file\n" unless defined $header_line;
+
+    my $csv = Text::CSV->new({ binary => 1 });
+
+    $csv->parse($header_line)
+        or die "Could not parse header in $file\n";
+    my @headers = $csv->fields();
+    my %field_idx;
+    for my $i (0 .. $#headers) {
+        $field_idx{ $headers[$i] } = $i;
+    }
+
+    my @connections;
+    while (my $line = <$fh>) {
+        chomp $line;
+        next if $line =~ /^\s*$/;
+        next unless $csv->parse($line);
+        my @fields = $csv->fields();
+        push @connections, {
+            first_name   => $fields[ $field_idx{'First Name'}   ] // '',
+            last_name    => $fields[ $field_idx{'Last Name'}    ] // '',
+            url          => $fields[ $field_idx{'URL'}          ] // '',
+            email        => $fields[ $field_idx{'Email Address'}] // '',
+            company      => $fields[ $field_idx{'Company'}      ] // '',
+            position     => $fields[ $field_idx{'Position'}     ] // '',
+            connected_on => $fields[ $field_idx{'Connected On'} ] // '',
+        };
+    }
+
+    close $fh;
+    return \@connections;
 }
 
 sub fetch_linkedin_search_html {
