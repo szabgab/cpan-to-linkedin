@@ -14,9 +14,9 @@ my $lead_columns = sub {
     my ($author_id, $distribution, $author_name) = @_;
     return sprintf(
         $lead_columns_format,
-        substr($author_id // '', 0, 10),
+        ($author_id // ''),
         substr($distribution // '', 0, 35),
-        substr($author_name // '', 0, 30),
+        ($author_name // ''),
     );
 };
 
