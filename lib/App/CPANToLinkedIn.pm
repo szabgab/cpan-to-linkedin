@@ -165,7 +165,7 @@ sub run {
             substr($author_id // '', 0, 10),
             substr($release->{distribution} // '', 0, 35),
             substr($author_name // '', 0, 30),
-            ($profile_url || ''),
+            ($profile_url // ''),
             ($connection_status // ''),
         );
     }
