@@ -69,7 +69,7 @@ my $stdout = '';
 }
 
 my @lines = split /\n/, $stdout;
-is scalar @lines, 5, 'prints header and four result rows';
+is scalar @lines, 2, 'by default prints header and only not_found rows';
 
 is(
     $lines[0],
@@ -83,10 +83,43 @@ is(
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
     [
+        $lead_columns->('SOMEONEELSE', 'Dist-Not-Connected', 'Different Person', 'not_found'),
+        'https://www.linkedin.com/search/results/all/?keywords=Different+Person',
+    ],
+    'default output includes not_found entries with a LinkedIn search URL',
+);
+
+$stdout = '';
+{
+    no warnings 'redefine';
+
+    local *App::CPANToLinkedIn::create_metacpan_client = sub { return bless {}, 'Local::MetaCPAN' };
+    local *App::CPANToLinkedIn::fetch_recent_releases = sub { return \@mock_releases };
+    local *App::CPANToLinkedIn::fetch_author_name = sub {
+        my (undef, $author_id) = @_;
+        return $mock_author_names{$author_id} // '';
+    };
+
+    open my $out_fh, '>', \$stdout or die "Could not open in-memory STDOUT: $!";
+    local *STDOUT = $out_fh;
+
+    is(
+        App::CPANToLinkedIn::run('--count', 2, '--all', '--linkedin-export', "$Bin/../linkedin-export"),
+        0,
+        'run succeeds with --all and mocked releases',
+    );
+}
+
+@lines = split /\n/, $stdout;
+is scalar @lines, 5, '--all prints header and all result rows';
+
+is_deeply(
+    [ split /\t/, $lines[1], -1 ],
+    [
         $lead_columns->('FOOBAR', 'Dist-Connected', 'Foo Bar', 'connected'),
         'https://www.linkedin.com/in/foobar',
     ],
-    'author listed in Connections.csv is reported connected with fixed-width lead columns',
+    '--all includes connected entries',
 );
 
 is_deeply(
@@ -95,7 +128,7 @@ is_deeply(
         $lead_columns->('SOMEONEELSE', 'Dist-Not-Connected', 'Different Person', 'not_found'),
         'https://www.linkedin.com/search/results/all/?keywords=Different+Person',
     ],
-    'author missing from Connections.csv gets a LinkedIn search URL with fixed-width lead columns',
+    '--all includes not_found entries with a LinkedIn search URL',
 );
 
 is_deeply(
@@ -141,9 +174,9 @@ eval {
         local *STDOUT = $out_fh;
 
         is(
-            App::CPANToLinkedIn::run('--count', 2, '--linkedin-export', "$Bin/../linkedin-export"),
+            App::CPANToLinkedIn::run('--count', 2, '--all', '--linkedin-export', "$Bin/../linkedin-export"),
             0,
-            'run succeeds with exclude.csv present',
+            'run succeeds with exclude.csv present and --all',
         );
     }
     1;
@@ -152,13 +185,33 @@ chdir $cwd or die "Could not restore current directory to $cwd: $!";
 die "Test failed during exclude.csv evaluation: $run_error" if $run_error;
 
 @lines = split /\n/, $stdout;
+is scalar @lines, 5, 'exclude.csv run with --all prints header and all result rows';
+
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
     [
         $lead_columns->('FOOBAR', 'Dist-Connected', 'Foo Bar', 'excluded'),
         '',
     ],
-    'author listed in exclude.csv is skipped with fixed-width lead columns',
+    'author listed in exclude.csv is reported as excluded with --all',
+);
+
+is_deeply(
+    [ split /\t/, $lines[3], -1 ],
+    [
+        $lead_columns->('JANEDOE', 'Dist-Emoji-Suffix', 'Jane Doe', 'connected'),
+        'https://www.linkedin.com/in/janedoe',
+    ],
+    'emoji-suffix name still matches in --all run with exclude.csv',
+);
+
+is_deeply(
+    [ split /\t/, $lines[4], -1 ],
+    [
+        $lead_columns->('JOEOTHER', 'Dist-Emoji-Prefix', 'Joe Other', 'connected'),
+        'https://www.linkedin.com/in/joeother',
+    ],
+    'emoji-prefix name still matches in --all run with exclude.csv',
 );
 
 done_testing();

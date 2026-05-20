@@ -32,6 +32,7 @@ sub parse_args {
     GetOptionsFromArray(
         \@argv,
         'count|n=i'              => \$options{count},
+        'all'                    => \$options{all},
         'linkedin-cookie=s'      => \$options{linkedin_cookie},
         'linkedin-cookie-file=s' => \$options{linkedin_cookie_file},
         'linkedin-export=s'      => \$options{linkedin_export},
@@ -78,6 +79,8 @@ These two modes are mutually exclusive.
 Options:
   --count, -n               Number of recent CPAN releases to inspect.
                             Defaults to 20.
+  --all                     Show all results. By default only entries with
+                            connection_status "not_found" are printed.
   --linkedin-export         Path to the folder containing the LinkedIn export
                             files (e.g. Connections.csv). When provided, the
                             script looks up authors in the exported connections
@@ -171,6 +174,9 @@ sub run {
         if (($connection_status // '') eq 'not_found') {
             $profile_url = linkedin_search_url($author_name || $author_id);
         }
+
+        my $should_print = $options->{all} || ($connection_status // '') eq 'not_found';
+        next if !$should_print;
 
         printf(
             "%-10s %-35s %-30s %-15s\t%s\n",

@@ -18,6 +18,9 @@ is $options->{count}, 5, 'count can be overridden';
 $options = App::CPANToLinkedIn::parse_args('--linkedin-export', '/tmp/export');
 is $options->{linkedin_export}, '/tmp/export', 'linkedin-export option is accepted';
 
+$options = App::CPANToLinkedIn::parse_args('--linkedin-export', '/tmp/export', '--all');
+ok $options->{all}, '--all option is accepted';
+
 # Neither mode selected → must die
 eval { App::CPANToLinkedIn::parse_args() };
 like $@, qr/Must specify exactly one workmode/, 'dies when no workmode is selected';
@@ -163,7 +166,7 @@ is(
 
 my $connections = App::CPANToLinkedIn::load_linkedin_connections("$Bin/../linkedin-export");
 is ref($connections), 'ARRAY', 'load_linkedin_connections returns an array ref';
-is scalar @$connections, 3, 'loads all connections from test CSV';
+is scalar @$connections, 3, 'loads three connections from test CSV';
 is $connections->[0]{first_name},   'Foo',                                      'parses first name';
 is $connections->[0]{last_name},    'Bar',                                      'parses last name';
 is $connections->[0]{url},          'https://www.linkedin.com/in/foobar',       'parses URL';
