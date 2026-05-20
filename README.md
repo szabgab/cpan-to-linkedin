@@ -4,6 +4,8 @@
 from MetaCPAN and tries to find matching LinkedIn profiles.
 By default it only prints entries whose `connection_status` is `not_found`.
 Use `--all` to print every processed result.
+At the end it also prints summary statistics for total entries, unique authors,
+and per-status unique-author counts.
 
 ## Usage
 
