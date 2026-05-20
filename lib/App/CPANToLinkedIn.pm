@@ -160,15 +160,13 @@ sub run {
             }
         }
 
-        print sprintf(
+        printf(
             "%-10s %-35s %-30s\t%s\t%s\n",
-            map { defined $_ ? $_ : '' } (
-                $author_id,
-                $release->{distribution},
-                $author_name,
-                ($profile_url || ''),
-                $connection_status,
-            )
+            substr($author_id // '', 0, 10),
+            substr($release->{distribution} // '', 0, 35),
+            substr($author_name // '', 0, 30),
+            ($profile_url || ''),
+            ($connection_status // ''),
         );
     }
 
