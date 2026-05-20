@@ -75,6 +75,13 @@ ok(
     'rejects malformed percent-encoded LinkedIn profile URL',
 );
 
+ok(
+    !defined App::CPANToLinkedIn::first_linkedin_profile_url(
+        q{<a href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.linkedin.com%2Fin%2Fbad%zzprofile%2F">Bad wrapped</a>}
+    ),
+    'rejects malformed percent-encoded wrapped LinkedIn profile URL',
+);
+
 is(
     App::CPANToLinkedIn::connection_status_from_search_html(
         q{<span>1st</span>}

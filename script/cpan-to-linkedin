@@ -176,6 +176,7 @@ sub first_linkedin_profile_url {
 
     while ($html =~ /uddg=([^"&]+)/g) {
         my $candidate = _url_decode($1);
+        next if !defined $candidate;
         return $candidate if $candidate =~ m{^https?://(?:www\.)?linkedin\.com/in/$profile_path/?$};
     }
 
@@ -261,6 +262,7 @@ sub _url_encode {
 
 sub _url_decode {
     my ($value) = @_;
+    return if $value =~ /%(?![0-9A-Fa-f]{2})/;
     $value =~ tr/+/ /;
     $value =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/ge;
     return $value;
