@@ -7,16 +7,33 @@ use Test::More;
 
 use App::CPANToLinkedIn;
 
-my $options = App::CPANToLinkedIn::parse_args();
+my $options = App::CPANToLinkedIn::parse_args('--linkedin-search');
 is $options->{count}, 20, 'default count is 20';
 is $options->{user_agent}, "cpan-to-linkedin/$App::CPANToLinkedIn::VERSION",
     'default user agent version matches module version';
 
-$options = App::CPANToLinkedIn::parse_args('--count', 5);
+$options = App::CPANToLinkedIn::parse_args('--linkedin-search', '--count', 5);
 is $options->{count}, 5, 'count can be overridden';
 
 $options = App::CPANToLinkedIn::parse_args('--linkedin-export', '/tmp/export');
 is $options->{linkedin_export}, '/tmp/export', 'linkedin-export option is accepted';
+
+# Neither mode selected → must die
+eval { App::CPANToLinkedIn::parse_args() };
+like $@, qr/Must specify exactly one workmode/, 'dies when no workmode is selected';
+
+eval { App::CPANToLinkedIn::parse_args('--count', 5) };
+like $@, qr/Must specify exactly one workmode/, 'dies when no workmode is selected with --count';
+
+# Both modes selected → must die
+eval { App::CPANToLinkedIn::parse_args('--linkedin-export', '/tmp/export', '--linkedin-search') };
+like $@, qr/Cannot use --linkedin-export together with/, 'dies when both --linkedin-export and --linkedin-search are given';
+
+eval { App::CPANToLinkedIn::parse_args('--linkedin-export', '/tmp/export', '--linkedin-cookie', 'tok') };
+like $@, qr/Cannot use --linkedin-export together with/, 'dies when both --linkedin-export and --linkedin-cookie are given';
+
+eval { App::CPANToLinkedIn::parse_args('--linkedin-export', '/tmp/export', '--linkedin-cookie-file', '/tmp/c') };
+like $@, qr/Cannot use --linkedin-export together with/, 'dies when both --linkedin-export and --linkedin-cookie-file are given';
 
 {
     package Local::Release;
