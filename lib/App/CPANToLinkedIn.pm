@@ -139,7 +139,7 @@ sub run {
 
     for my $release (@{$releases}) {
         my $author_id = $release->{author} // '';
-        if ($author_id !~ /\S/) {
+        if ($author_id eq '') {
             warn "Empty author_id for distribution '" . ($release->{distribution} // '') . "', skipping\n";
             next;
         }
