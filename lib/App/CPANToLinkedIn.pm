@@ -130,6 +130,7 @@ sub run {
     my %author_cache;
     my $excluded_author_ids = load_excluded_pause_ids('exclude.csv');
     my %unique_author_status;
+    my %printed_author_ids;
 
     print sprintf(
         "%-10s %-35s %-30s %-15s\tlinkedin_profile\n",
@@ -190,6 +191,8 @@ sub run {
             || ($connection_status // '') eq 'not_found'
             || ($connection_status // '') eq 'excluded_connected';
         next if !$should_print;
+        next if !$options->{all} && $printed_author_ids{$author_id};
+        $printed_author_ids{$author_id} = 1;
 
         printf(
             "%-10s %-35s %-30s %-15s\t%s\n",
