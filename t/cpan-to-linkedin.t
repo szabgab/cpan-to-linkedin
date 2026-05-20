@@ -155,6 +155,12 @@ is(
     'detects out-of-network search result',
 );
 
+is(
+    App::CPANToLinkedIn::linkedin_search_url('Foo Bar'),
+    'https://www.linkedin.com/search/results/all/?keywords=Foo+Bar',
+    'builds LinkedIn search URL for not-found names',
+);
+
 my $connections = App::CPANToLinkedIn::load_linkedin_connections("$Bin/../linkedin-export");
 is ref($connections), 'ARRAY', 'load_linkedin_connections returns an array ref';
 is scalar @$connections, 1, 'loads one connection from test CSV';

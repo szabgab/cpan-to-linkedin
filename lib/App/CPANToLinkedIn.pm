@@ -17,6 +17,7 @@ our @EXPORT_OK = qw(
     releases_from_resultset
     first_linkedin_profile_url
     connection_status_from_search_html
+    linkedin_search_url
     run
 );
 
@@ -125,8 +126,8 @@ sub run {
     my $excluded_author_ids = load_excluded_pause_ids('exclude.csv');
 
     print sprintf(
-        "%-10s %-35s %-30s\tlinkedin_profile\tconnection_status\n",
-        qw(author_id distribution author_name)
+        "%-10s %-35s %-30s %-15s\tlinkedin_profile\n",
+        qw(author_id distribution author_name connection_status)
     );
 
     for my $release (@{$releases}) {
@@ -160,13 +161,17 @@ sub run {
             }
         }
 
+        if (($connection_status // '') eq 'not_found') {
+            $profile_url = linkedin_search_url($author_name || $author_id);
+        }
+
         printf(
-            "%-10s %-35s %-30s\t%s\t%s\n",
+            "%-10s %-35s %-30s %-15s\t%s\n",
             ($author_id // ''),
             substr($release->{distribution} // '', 0, 35),
             ($author_name // ''),
-            ($profile_url // ''),
             ($connection_status // ''),
+            ($profile_url // ''),
         );
     }
 
@@ -326,6 +331,18 @@ sub connection_status_from_search_html {
     return '3rd+'      if $html =~ />\s*3rd\s*</i;
     return 'out_of_network' if $html =~ /out of network/i;
     return 'unknown';
+}
+
+sub linkedin_search_url {
+    my ($query) = @_;
+    $query = '' if !defined $query;
+    $query =~ s/^\s+|\s+\z//g;
+    return '' if $query eq '';
+
+    my $encoded = _url_encode($query);
+    $encoded =~ s/%20/+/g;
+
+    return "https://www.linkedin.com/search/results/all/?keywords=$encoded";
 }
 
 sub _cookie_header {
