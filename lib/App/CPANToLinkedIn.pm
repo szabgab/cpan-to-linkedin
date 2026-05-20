@@ -143,7 +143,17 @@ sub run {
         my ($profile_url, $connection_status);
 
         if ($excluded_author_ids->{$author_id}) {
-            $connection_status = 'excluded';
+            if ($options->{linkedin_export}) {
+                my $entry = $connections_by_name{lc($author_name || '')};
+                if ($entry && $entry->{url}) {
+                    $profile_url       = $entry->{url};
+                    $connection_status = 'excluded_connected';
+                } else {
+                    $connection_status = 'excluded';
+                }
+            } else {
+                $connection_status = 'excluded';
+            }
         } elsif ($options->{linkedin_export}) {
             my $entry = $connections_by_name{lc($author_name || '')};
             if (!$entry) {
@@ -175,7 +185,9 @@ sub run {
             $profile_url = linkedin_search_url($author_name || $author_id);
         }
 
-        my $should_print = $options->{all} || ($connection_status // '') eq 'not_found';
+        my $should_print = $options->{all}
+            || ($connection_status // '') eq 'not_found'
+            || ($connection_status // '') eq 'excluded_connected';
         next if !$should_print;
 
         printf(
