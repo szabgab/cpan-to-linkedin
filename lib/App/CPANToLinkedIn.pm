@@ -168,7 +168,8 @@ sub run {
             $profile_url = linkedin_search_url($author_name || $author_id);
         }
 
-        next if !$options->{all} && ($connection_status // '') ne 'not_found';
+        my $should_print = $options->{all} || ($connection_status // '') eq 'not_found';
+        next if !$should_print;
 
         printf(
             "%-10s %-35s %-30s %-15s\t%s\n",
