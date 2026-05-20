@@ -472,4 +472,75 @@ is_deeply(
     'matches author name to LinkedIn first name containing emoji prefix',
 );
 
+my @releases_with_empty_author = (
+    {
+        distribution => 'Dist-Empty-Author',
+        author       => '',
+    },
+    {
+        distribution => 'Dist-Connected',
+        author       => 'FOOBAR',
+    },
+);
+my @fetch_author_name_calls;
+my $stderr = '';
+$stdout = '';
+{
+    no warnings 'redefine';
+
+    local *App::CPANToLinkedIn::create_metacpan_client = sub { return bless {}, 'Local::MetaCPAN' };
+    local *App::CPANToLinkedIn::fetch_recent_releases = sub { return \@releases_with_empty_author };
+    local *App::CPANToLinkedIn::fetch_author_name = sub {
+        my (undef, $author_id) = @_;
+        push @fetch_author_name_calls, $author_id;
+        return $mock_author_names{$author_id} // '';
+    };
+
+    open my $out_fh, '>', \$stdout or die "Could not open in-memory STDOUT: $!";
+    local *STDOUT = $out_fh;
+    open my $err_fh, '>', \$stderr or die "Could not open in-memory STDERR: $!";
+    local *STDERR = $err_fh;
+
+    is(
+        App::CPANToLinkedIn::run('--count', 2, '--all', '--linkedin-export', "$Bin/../linkedin-export"),
+        0,
+        'run succeeds when one release has an empty author_id',
+    );
+}
+
+@lines = split /\n/, $stdout;
+is scalar @lines, 7, 'empty author_id release is skipped from output while summary is printed';
+
+is_deeply(
+    [ split /\t/, $lines[1], -1 ],
+    [
+        $lead_columns->('FOOBAR', 'Dist-Connected', 'Foo Bar', 'connected'),
+        'https://www.linkedin.com/in/foobar',
+    ],
+    'non-empty author_id release is still processed normally',
+);
+
+$assert_summary->(
+    \@lines,
+    2,
+    1,
+    {
+        connected => 1,
+        excluded  => 0,
+        not_found => 0,
+    },
+    'output with empty author_id release',
+);
+
+is_deeply(
+    \@fetch_author_name_calls,
+    ['FOOBAR'],
+    'does not fetch author name for releases with empty author_id',
+);
+like(
+    $stderr,
+    qr/Empty author_id for distribution 'Dist-Empty-Author', skipping/,
+    'warns when release has empty author_id',
+);
+
 done_testing();
