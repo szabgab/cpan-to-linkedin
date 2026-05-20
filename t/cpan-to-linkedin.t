@@ -163,10 +163,14 @@ is(
 
 my $connections = App::CPANToLinkedIn::load_linkedin_connections("$Bin/../linkedin-export");
 is ref($connections), 'ARRAY', 'load_linkedin_connections returns an array ref';
-is scalar @$connections, 1, 'loads one connection from test CSV';
+is scalar @$connections, 3, 'loads all connections from test CSV';
 is $connections->[0]{first_name},   'Foo',                                      'parses first name';
 is $connections->[0]{last_name},    'Bar',                                      'parses last name';
 is $connections->[0]{url},          'https://www.linkedin.com/in/foobar',       'parses URL';
 is $connections->[0]{connected_on}, '28 Mar 2026',                              'parses connected_on date';
+is $connections->[1]{first_name},   'Jane 🦀',                                  'parses first name with emoji suffix';
+is $connections->[1]{last_name},    'Doe',                                      'parses last name for emoji suffix entry';
+is $connections->[2]{first_name},   '🐍 Joe',                                   'parses first name with emoji prefix';
+is $connections->[2]{last_name},    'Other',                                    'parses last name for emoji prefix entry';
 
 done_testing();

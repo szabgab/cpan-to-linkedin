@@ -30,11 +30,21 @@ my @mock_releases = (
         distribution => 'Dist-Not-Connected',
         author       => 'SOMEONEELSE',
     },
+    {
+        distribution => 'Dist-Emoji-Suffix',
+        author       => 'JANEDOE',
+    },
+    {
+        distribution => 'Dist-Emoji-Prefix',
+        author       => 'JOEOTHER',
+    },
 );
 
 my %mock_author_names = (
     FOOBAR      => 'Foo Bar',
     SOMEONEELSE => 'Different Person',
+    JANEDOE     => 'Jane Doe',
+    JOEOTHER    => 'Joe Other',
 );
 
 my $stdout = '';
@@ -59,7 +69,7 @@ my $stdout = '';
 }
 
 my @lines = split /\n/, $stdout;
-is scalar @lines, 3, 'prints header and two result rows';
+is scalar @lines, 5, 'prints header and four result rows';
 
 is(
     $lines[0],
@@ -86,6 +96,24 @@ is_deeply(
         'https://www.linkedin.com/search/results/all/?keywords=Different+Person',
     ],
     'author missing from Connections.csv gets a LinkedIn search URL with fixed-width lead columns',
+);
+
+is_deeply(
+    [ split /\t/, $lines[3], -1 ],
+    [
+        $lead_columns->('JANEDOE', 'Dist-Emoji-Suffix', 'Jane Doe', 'connected'),
+        'https://www.linkedin.com/in/janedoe',
+    ],
+    'author name matches a LinkedIn connection when CSV name has emoji suffix',
+);
+
+is_deeply(
+    [ split /\t/, $lines[4], -1 ],
+    [
+        $lead_columns->('JOEOTHER', 'Dist-Emoji-Prefix', 'Joe Other', 'connected'),
+        'https://www.linkedin.com/in/joeother',
+    ],
+    'author name matches a LinkedIn connection when CSV name has emoji prefix',
 );
 
 my $tempdir = tempdir(CLEANUP => 1);
