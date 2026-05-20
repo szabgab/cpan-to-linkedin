@@ -260,4 +260,61 @@ is_deeply(
     'author in exclude.csv who is not connected is reported as excluded with --all',
 );
 
+my @emoji_name_releases = (
+    {
+        distribution => 'Dist-Emoji-Jane',
+        author       => 'JANEDOE',
+    },
+    {
+        distribution => 'Dist-Emoji-Joe',
+        author       => 'JOEOTHER',
+    },
+);
+my %emoji_author_names = (
+    JANEDOE  => 'Jane Doe',
+    JOEOTHER => 'Joe Other',
+);
+
+$stdout = '';
+{
+    no warnings 'redefine';
+
+    local *App::CPANToLinkedIn::create_metacpan_client = sub { return bless {}, 'Local::MetaCPAN' };
+    local *App::CPANToLinkedIn::fetch_recent_releases = sub { return \@emoji_name_releases };
+    local *App::CPANToLinkedIn::fetch_author_name = sub {
+        my (undef, $author_id) = @_;
+        return $emoji_author_names{$author_id} // '';
+    };
+
+    open my $out_fh, '>', \$stdout or die "Could not open in-memory STDOUT: $!";
+    local *STDOUT = $out_fh;
+
+    is(
+        App::CPANToLinkedIn::run('--count', 2, '--all', '--linkedin-export', "$Bin/../linkedin-export"),
+        0,
+        'run succeeds when LinkedIn export names include emojis',
+    );
+}
+
+@lines = split /\n/, $stdout;
+is scalar @lines, 3, 'emoji-inclusive LinkedIn names are matched as connected';
+
+is_deeply(
+    [ split /\t/, $lines[1], -1 ],
+    [
+        $lead_columns->('JANEDOE', 'Dist-Emoji-Jane', 'Jane Doe', 'connected'),
+        'https://www.linkedin.com/in/janedoe',
+    ],
+    'matches author name to LinkedIn first name containing emoji suffix',
+);
+
+is_deeply(
+    [ split /\t/, $lines[2], -1 ],
+    [
+        $lead_columns->('JOEOTHER', 'Dist-Emoji-Joe', 'Joe Other', 'connected'),
+        'https://www.linkedin.com/in/joeother',
+    ],
+    'matches author name to LinkedIn first name containing emoji prefix',
+);
+
 done_testing();

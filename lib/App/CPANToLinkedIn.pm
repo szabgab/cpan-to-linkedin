@@ -119,7 +119,9 @@ sub run {
     if ($options->{linkedin_export}) {
         my $connections = load_linkedin_connections($options->{linkedin_export});
         for my $c (@$connections) {
-            my $name = lc(join(' ', grep { length $_ } $c->{first_name}, $c->{last_name}));
+            my $name = _normalized_name_key(
+                join(' ', grep { length $_ } $c->{first_name}, $c->{last_name})
+            );
             $connections_by_name{$name} = $c if $name;
         }
     }
@@ -140,7 +142,7 @@ sub run {
 
         if ($excluded_author_ids->{$author_id}) {
             if ($options->{linkedin_export}) {
-                my $entry = $connections_by_name{lc($author_name || '')};
+                my $entry = $connections_by_name{_normalized_name_key($author_name)};
                 if ($entry && $entry->{url}) {
                     $profile_url       = $entry->{url};
                     $connection_status = 'excluded_connected';
@@ -151,7 +153,7 @@ sub run {
                 $connection_status = 'excluded';
             }
         } elsif ($options->{linkedin_export}) {
-            my $entry = $connections_by_name{lc($author_name || '')};
+            my $entry = $connections_by_name{_normalized_name_key($author_name)};
             if ($entry && $entry->{url}) {
                 $profile_url       = $entry->{url};
                 $connection_status = 'connected';
@@ -385,6 +387,16 @@ sub _url_encode {
     my ($value) = @_;
     $value =~ s/([^A-Za-z0-9\-._~])/sprintf('%%%02X', ord($1))/ge;
     return $value;
+}
+
+sub _normalized_name_key {
+    my ($name) = @_;
+    $name = '' if !defined $name;
+    $name = lc $name;
+    $name =~ s/[^\p{L}\p{M}\p{N}\s'\-]+/ /g;
+    $name =~ s/\s+/ /g;
+    $name =~ s/^\s+|\s+\z//g;
+    return $name;
 }
 
 1;
