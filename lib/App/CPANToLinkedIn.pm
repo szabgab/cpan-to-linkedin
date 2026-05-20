@@ -25,7 +25,7 @@ sub parse_args {
 
     my %options = (
         count      => 20,
-        user_agent => 'cpan-to-linkedin/0.1',
+        user_agent => "cpan-to-linkedin/$VERSION",
     );
 
     GetOptionsFromArray(

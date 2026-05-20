@@ -9,6 +9,8 @@ use App::CPANToLinkedIn;
 
 my $options = App::CPANToLinkedIn::parse_args();
 is $options->{count}, 20, 'default count is 20';
+is $options->{user_agent}, "cpan-to-linkedin/$App::CPANToLinkedIn::VERSION",
+    'default user agent version matches module version';
 
 $options = App::CPANToLinkedIn::parse_args('--count', 5);
 is $options->{count}, 5, 'count can be overridden';
