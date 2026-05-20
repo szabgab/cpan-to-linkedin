@@ -1,0 +1,271 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+package App::CPANToLinkedIn;
+
+use Exporter 'import';
+use Getopt::Long qw(GetOptionsFromArray);
+use HTTP::Tiny;
+use JSON::PP qw(decode_json);
+
+our @EXPORT_OK = qw(
+    parse_args
+    recent_packages_from_search_response
+    first_linkedin_profile_url
+    connection_status_from_search_html
+    run
+);
+
+sub parse_args {
+    my (@argv) = @_;
+
+    my %options = (
+        count      => 20,
+        user_agent => 'cpan-to-linkedin/0.1',
+    );
+
+    GetOptionsFromArray(
+        \@argv,
+        'count|n=i'           => \$options{count},
+        'linkedin-cookie=s'   => \$options{linkedin_cookie},
+        'linkedin-cookie-file=s' => \$options{linkedin_cookie_file},
+        'help'                => \$options{help},
+    ) or die usage();
+
+    die "--count must be a positive integer\n" if $options{count} < 1;
+
+    $options{cookie_header} = _cookie_header(\%options);
+    $options{query_suffix}  = $options{cookie_header} ? '' : ' public profile';
+
+    return \%options;
+}
+
+sub usage {
+    return <<'END_USAGE';
+Usage: script/cpan-to-linkedin [--count N] [--linkedin-cookie COOKIE]
+       script/cpan-to-linkedin [--count N] [--linkedin-cookie-file FILE]
+
+Fetch the N most recent CPAN releases from MetaCPAN, then try to find each
+author on LinkedIn.
+
+Options:
+  --count, -n               Number of recent CPAN releases to inspect.
+                            Defaults to 20.
+  --linkedin-cookie         Raw LinkedIn Cookie header for authenticated
+                            searches. If omitted, the script only performs a
+                            public profile lookup and reports connection status
+                            as "unknown".
+  --linkedin-cookie-file    File containing the raw LinkedIn Cookie header.
+  --help                    Show this help.
+END_USAGE
+}
+
+sub run {
+    my (@argv) = @_;
+    my $options = parse_args(@argv);
+
+    if ($options->{help}) {
+        print usage();
+        return 0;
+    }
+
+    my $http = HTTP::Tiny->new(
+        agent      => $options->{user_agent},
+        verify_SSL => 1,
+        timeout    => 30,
+        default_headers => {
+            Accept => 'application/json, text/html;q=0.9,*/*;q=0.8',
+        },
+    );
+
+    my $releases = fetch_recent_releases($http, $options->{count});
+    my %author_cache;
+
+    print join(
+        "\t",
+        qw(distribution author_id author_name linkedin_profile connection_status)
+    ), "\n";
+
+    for my $release (@{$releases}) {
+        my $author_id = $release->{author} // '';
+        my $author_name = $author_cache{$author_id} ||= fetch_author_name($http, $author_id);
+        my $profile_url = find_linkedin_profile(
+            $http,
+            $author_name || $author_id,
+            $options->{query_suffix},
+        );
+        my $connection_status = 'not_found';
+
+        if ($profile_url) {
+            $connection_status = $options->{cookie_header}
+                ? find_connection_status($http, $author_name || $author_id, $options->{cookie_header})
+                : 'unknown';
+        }
+
+        print join(
+            "\t",
+            map { defined $_ ? $_ : '' } (
+                $release->{distribution},
+                $author_id,
+                $author_name,
+                ($profile_url || ''),
+                $connection_status,
+            )
+        ), "\n";
+    }
+
+    return 0;
+}
+
+sub fetch_recent_releases {
+    my ($http, $count) = @_;
+
+    my $url = sprintf(
+        'https://fastapi.metacpan.org/v1/release/_search?size=%d&sort=date:desc&q=status:latest',
+        $count,
+    );
+
+    my $data = _get_json($http, $url);
+    return recent_packages_from_search_response($data);
+}
+
+sub recent_packages_from_search_response {
+    my ($data) = @_;
+
+    my @packages = map {
+        my $source = $_->{_source} || {};
+        +{
+            distribution => $source->{distribution},
+            author       => $source->{author},
+            date         => $source->{date},
+        };
+    } @{ $data->{hits}{hits} || [] };
+
+    return \@packages;
+}
+
+sub fetch_author_name {
+    my ($http, $author_id) = @_;
+    return '' if !$author_id;
+
+    my $url = "https://fastapi.metacpan.org/v1/author/$author_id";
+    my $data = eval { _get_json($http, $url) };
+    return '' if $@;
+
+    return $data->{name} || '';
+}
+
+sub find_linkedin_profile {
+    my ($http, $query, $suffix) = @_;
+
+    my $search_query = qq{site:linkedin.com/in "$query"};
+    $search_query .= " $suffix" if defined $suffix && length $suffix;
+    my $url = 'https://duckduckgo.com/html/?q=' . _url_encode($search_query);
+
+    my $html = _get_text($http, $url);
+    return first_linkedin_profile_url($html);
+}
+
+sub first_linkedin_profile_url {
+    my ($html) = @_;
+    return unless defined $html;
+
+    while ($html =~ /uddg=([^"&]+)/g) {
+        my $candidate = _url_decode($1);
+        return $candidate if $candidate =~ m{^https?://(?:www\.)?linkedin\.com/in/[A-Za-z0-9%._\-]+/?$};
+    }
+
+    while ($html =~ m{https?://(?:www\.)?linkedin\.com/in/[A-Za-z0-9%._\-]+/?}g) {
+        my $candidate = $&;
+        $candidate =~ s/&amp;/&/g;
+        return $candidate;
+    }
+
+    return;
+}
+
+sub find_connection_status {
+    my ($http, $query, $cookie_header) = @_;
+
+    my $url = 'https://www.linkedin.com/search/results/people/?keywords='
+        . _url_encode($query);
+
+    my $response = $http->get(
+        $url,
+        {
+            headers => {
+                Cookie => $cookie_header,
+            },
+        }
+    );
+
+    return 'unknown' unless $response->{success};
+
+    return connection_status_from_search_html($response->{content});
+}
+
+sub connection_status_from_search_html {
+    my ($html) = @_;
+    return 'unknown' if !defined $html || $html eq '';
+
+    return 'connected' if $html =~ />\s*1st\s*</i;
+    return '2nd'       if $html =~ />\s*2nd\s*</i;
+    return '3rd+'      if $html =~ />\s*3rd\s*</i;
+    return 'out_of_network' if $html =~ /out of network/i;
+    return 'unknown';
+}
+
+sub _cookie_header {
+    my ($options) = @_;
+
+    return $options->{linkedin_cookie} if $options->{linkedin_cookie};
+
+    if ($options->{linkedin_cookie_file}) {
+        open my $fh, '<', $options->{linkedin_cookie_file}
+            or die "Could not open $options->{linkedin_cookie_file}: $!\n";
+        local $/ = undef;
+        my $cookie = <$fh>;
+        close $fh;
+        $cookie =~ s/\s+\z// if defined $cookie;
+        return $cookie;
+    }
+
+    return $ENV{LINKEDIN_COOKIE} || '';
+}
+
+sub _get_json {
+    my ($http, $url) = @_;
+    my $response = $http->get($url);
+    die "Request failed for $url: $response->{status} $response->{reason}\n"
+        if !$response->{success};
+    return decode_json($response->{content});
+}
+
+sub _get_text {
+    my ($http, $url) = @_;
+    my $response = $http->get($url);
+    die "Request failed for $url: $response->{status} $response->{reason}\n"
+        if !$response->{success};
+    return $response->{content};
+}
+
+sub _url_encode {
+    my ($value) = @_;
+    $value =~ s/([^A-Za-z0-9\-._~])/sprintf('%%%02X', ord($1))/ge;
+    return $value;
+}
+
+sub _url_decode {
+    my ($value) = @_;
+    $value =~ tr/+/ /;
+    $value =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/ge;
+    return $value;
+}
+
+package main;
+
+exit App::CPANToLinkedIn::run(@ARGV) unless caller;
+
+1;
