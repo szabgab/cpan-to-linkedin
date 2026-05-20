@@ -192,7 +192,6 @@ sub run {
             || ($connection_status // '') eq 'excluded_connected';
         next if !$should_print;
         next if !$options->{all} && $printed_author_ids{$author_id};
-        $printed_author_ids{$author_id} = 1;
 
         printf(
             "%-10s %-35s %-30s %-15s\t%s\n",
@@ -202,6 +201,7 @@ sub run {
             ($connection_status // ''),
             ($profile_url // ''),
         );
+        $printed_author_ids{$author_id} = 1;
     }
 
     my %status_counts;
