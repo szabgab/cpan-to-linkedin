@@ -13,6 +13,9 @@ is $options->{count}, 20, 'default count is 20';
 $options = App::CPANToLinkedIn::parse_args('--count', 5);
 is $options->{count}, 5, 'count can be overridden';
 
+$options = App::CPANToLinkedIn::parse_args('--linkedin-export', '/tmp/export');
+is $options->{linkedin_export}, '/tmp/export', 'linkedin-export option is accepted';
+
 {
     package Local::Release;
 
@@ -125,5 +128,13 @@ is(
     'out_of_network',
     'detects out-of-network search result',
 );
+
+my $connections = App::CPANToLinkedIn::load_linkedin_connections("$Bin/../linkedin-export");
+is ref($connections), 'ARRAY', 'load_linkedin_connections returns an array ref';
+is scalar @$connections, 1, 'loads one connection from test CSV';
+is $connections->[0]{first_name},   'Foo',                                      'parses first name';
+is $connections->[0]{last_name},    'Bar',                                      'parses last name';
+is $connections->[0]{url},          'https://www.linkedin.com/in/foobar',       'parses URL';
+is $connections->[0]{connected_on}, '28 Mar 2026',                              'parses connected_on date';
 
 done_testing();
