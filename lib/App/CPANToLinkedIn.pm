@@ -129,6 +129,7 @@ sub run {
     my $releases = fetch_recent_releases($mcpan, $options->{count});
     my %author_cache;
     my $excluded_author_ids = load_excluded_pause_ids('exclude.csv');
+    my %unique_author_status;
 
     print sprintf(
         "%-10s %-35s %-30s %-15s\tlinkedin_profile\n",
@@ -180,6 +181,16 @@ sub run {
             $profile_url = linkedin_search_url($author_name || $author_id);
         }
 
+        my $author_key = '';
+        if (($author_id // '') ne '') {
+            $author_key = "id:$author_id";
+        } elsif (($author_name // '') ne '') {
+            $author_key = "name:$author_name";
+        }
+        if ($author_key ne '' && !exists $unique_author_status{$author_key}) {
+            $unique_author_status{$author_key} = $connection_status // '';
+        }
+
         my $should_print = $options->{all}
             || ($connection_status // '') eq 'not_found'
             || ($connection_status // '') eq 'excluded_connected';
@@ -193,6 +204,23 @@ sub run {
             ($connection_status // ''),
             ($profile_url // ''),
         );
+    }
+
+    my %status_counts;
+    for my $status (values %unique_author_status) {
+        $status_counts{$status}++;
+    }
+
+    print "Total entries: " . scalar(@{$releases}) . "\n";
+    print "Unique authors: " . scalar(keys %unique_author_status) . "\n";
+
+    my %printed_status;
+    for my $status (qw(connected not_found excluded)) {
+        print "  $status: " . ($status_counts{$status} // 0) . "\n";
+        $printed_status{$status} = 1;
+    }
+    for my $status (sort grep { !$printed_status{$_} } keys %status_counts) {
+        print "  $status: $status_counts{$status}\n";
     }
 
     return 0;

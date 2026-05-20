@@ -21,6 +21,29 @@ my $lead_columns = sub {
     );
 };
 
+my $assert_summary = sub {
+    my ($lines, $expected_total, $expected_unique, $expected_status_counts, $message) = @_;
+
+    my %summary;
+    my ($total_line) = grep { /^Total entries:/ } @{$lines};
+    my ($unique_line) = grep { /^Unique authors:/ } @{$lines};
+
+    like($total_line // '', qr/^Total entries: \d+\z/, "$message: total line present");
+    like($unique_line // '', qr/^Unique authors: \d+\z/, "$message: unique line present");
+
+    my ($total)  = ($total_line  // '') =~ /^Total entries: (\d+)\z/;
+    my ($unique) = ($unique_line // '') =~ /^Unique authors: (\d+)\z/;
+    is($total,  $expected_total,  "$message: total entries");
+    is($unique, $expected_unique, "$message: unique authors");
+
+    for my $line (@{$lines}) {
+        next if $line !~ /^  ([^:]+):\s*(\d+)\z/;
+        $summary{$1} = $2;
+    }
+
+    is_deeply(\%summary, $expected_status_counts, "$message: status counts");
+};
+
 my @mock_releases = (
     {
         distribution => 'Dist-Connected',
@@ -59,7 +82,7 @@ my $stdout = '';
 }
 
 my @lines = split /\n/, $stdout;
-is scalar @lines, 2, 'by default prints header and only not_found rows';
+is scalar @lines, 7, 'by default prints header, only not_found rows, and summary stats';
 
 is(
     $lines[0],
@@ -77,6 +100,18 @@ is_deeply(
         'https://www.linkedin.com/search/results/all/?keywords=Different+Person',
     ],
     'default output includes not_found entries with a LinkedIn search URL',
+);
+
+$assert_summary->(
+    \@lines,
+    2,
+    2,
+    {
+        connected => 1,
+        excluded  => 0,
+        not_found => 1,
+    },
+    'default output',
 );
 
 $stdout = '';
@@ -101,7 +136,7 @@ $stdout = '';
 }
 
 @lines = split /\n/, $stdout;
-is scalar @lines, 3, '--all prints header and all result rows';
+is scalar @lines, 8, '--all prints header, all result rows, and summary stats';
 
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
@@ -110,6 +145,18 @@ is_deeply(
         'https://www.linkedin.com/in/foobar',
     ],
     '--all includes connected entries',
+);
+
+$assert_summary->(
+    \@lines,
+    2,
+    2,
+    {
+        connected => 1,
+        excluded  => 0,
+        not_found => 1,
+    },
+    '--all output',
 );
 
 is_deeply(
@@ -157,7 +204,7 @@ chdir $cwd or die "Could not restore current directory to $cwd: $!";
 die "Test failed during exclude.csv evaluation: $run_error" if $run_error;
 
 @lines = split /\n/, $stdout;
-is scalar @lines, 3, 'excluded+connected author prints by default (header + excluded_connected + not_found)';
+is scalar @lines, 9, 'excluded+connected author prints by default (rows + summary stats)';
 
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
@@ -166,6 +213,19 @@ is_deeply(
         'https://www.linkedin.com/in/foobar',
     ],
     'author in exclude.csv who is also connected is reported as excluded_connected with profile URL',
+);
+
+$assert_summary->(
+    \@lines,
+    2,
+    2,
+    {
+        connected          => 0,
+        excluded           => 0,
+        excluded_connected => 1,
+        not_found          => 1,
+    },
+    'default output with excluded_connected',
 );
 
 is_deeply(
@@ -219,7 +279,19 @@ chdir $cwd or die "Could not restore current directory to $cwd: $!";
 die "Test failed during excluded-not-connected evaluation: $run_error2" if $run_error2;
 
 @lines = split /\n/, $stdout;
-is scalar @lines, 1, 'excluded-but-not-connected author is not printed by default (only header)';
+is scalar @lines, 6, 'excluded-but-not-connected default output still prints summary stats';
+
+$assert_summary->(
+    \@lines,
+    1,
+    1,
+    {
+        connected => 0,
+        excluded  => 1,
+        not_found => 0,
+    },
+    'default output with excluded author only',
+);
 
 $stdout = '';
 chdir $tempdir2 or die "Could not chdir to $tempdir2: $!";
@@ -249,7 +321,7 @@ chdir $cwd or die "Could not restore current directory to $cwd: $!";
 die "Test failed during excluded-not-connected --all evaluation: $run_error2" if $run_error2;
 
 @lines = split /\n/, $stdout;
-is scalar @lines, 2, 'excluded-but-not-connected author printed with --all (header + excluded)';
+is scalar @lines, 7, 'excluded-but-not-connected with --all prints row and summary stats';
 
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
@@ -258,6 +330,18 @@ is_deeply(
         '',
     ],
     'author in exclude.csv who is not connected is reported as excluded with --all',
+);
+
+$assert_summary->(
+    \@lines,
+    1,
+    1,
+    {
+        connected => 0,
+        excluded  => 1,
+        not_found => 0,
+    },
+    '--all output with excluded author only',
 );
 
 my @emoji_name_releases = (
@@ -297,7 +381,7 @@ $stdout = '';
 }
 
 @lines = split /\n/, $stdout;
-is scalar @lines, 3, 'emoji-inclusive LinkedIn names are matched as connected';
+is scalar @lines, 8, 'emoji-inclusive LinkedIn names are matched as connected and include summary stats';
 
 is_deeply(
     [ split /\t/, $lines[1], -1 ],
@@ -306,6 +390,18 @@ is_deeply(
         'https://www.linkedin.com/in/janedoe',
     ],
     'matches author name to LinkedIn first name containing emoji suffix',
+);
+
+$assert_summary->(
+    \@lines,
+    2,
+    2,
+    {
+        connected => 2,
+        excluded  => 0,
+        not_found => 0,
+    },
+    'emoji-name output',
 );
 
 is_deeply(
