@@ -181,13 +181,8 @@ sub run {
             $profile_url = linkedin_search_url($author_name || $author_id);
         }
 
-        my $author_key = '';
-        if (($author_id // '') ne '') {
-            $author_key = "id:$author_id";
-        } elsif (($author_name // '') ne '') {
-            $author_key = "name:$author_name";
-        }
-        if ($author_key ne '' && !exists $unique_author_status{$author_key}) {
+        my $author_key = "id:$author_id";
+        if (!exists $unique_author_status{$author_key}) {
             $unique_author_status{$author_key} = $connection_status // '';
         }
 
