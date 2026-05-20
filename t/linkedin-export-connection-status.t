@@ -115,6 +115,65 @@ $assert_summary->(
 );
 
 $stdout = '';
+my @duplicate_author_releases = (
+    {
+        distribution => 'Dist-Not-Connected-1',
+        author       => 'SOMEONEELSE',
+    },
+    {
+        distribution => 'Dist-Not-Connected-2',
+        author       => 'SOMEONEELSE',
+    },
+    {
+        distribution => 'Dist-Connected',
+        author       => 'FOOBAR',
+    },
+);
+{
+    no warnings 'redefine';
+
+    local *App::CPANToLinkedIn::create_metacpan_client = sub { return bless {}, 'Local::MetaCPAN' };
+    local *App::CPANToLinkedIn::fetch_recent_releases = sub { return \@duplicate_author_releases };
+    local *App::CPANToLinkedIn::fetch_author_name = sub {
+        my (undef, $author_id) = @_;
+        return $mock_author_names{$author_id} // '';
+    };
+
+    open my $out_fh, '>', \$stdout or die "Could not open in-memory STDOUT: $!";
+    local *STDOUT = $out_fh;
+
+    is(
+        App::CPANToLinkedIn::run('--count', 3, '--linkedin-export', "$Bin/../linkedin-export"),
+        0,
+        'run succeeds with duplicate author releases',
+    );
+}
+
+@lines = split /\n/, $stdout;
+is scalar @lines, 7, 'default output prints each author_id only once';
+
+is_deeply(
+    [ split /\t/, $lines[1], -1 ],
+    [
+        $lead_columns->('SOMEONEELSE', 'Dist-Not-Connected-1', 'Different Person', 'not_found'),
+        'https://www.linkedin.com/search/results/all/?keywords=Different+Person',
+    ],
+    'default output keeps only one row for duplicated author_id',
+);
+
+$assert_summary->(
+    \@lines,
+    3,
+    2,
+    {
+        connected => 1,
+        excluded  => 0,
+        not_found => 1,
+    },
+    'default output with duplicate authors',
+);
+
+$stdout = '';
 {
     no warnings 'redefine';
 
