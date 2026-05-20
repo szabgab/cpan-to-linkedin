@@ -150,7 +150,7 @@ my @duplicate_author_releases = (
 }
 
 @lines = split /\n/, $stdout;
-is scalar @lines, 7, 'default output prints each author_id only once';
+is scalar @lines, (1 + 1 + 5), 'default output prints each author_id only once';
 
 is_deeply(
     [ split /\t/, $lines[1], -1 ],

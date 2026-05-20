@@ -191,7 +191,7 @@ sub run {
             || ($connection_status // '') eq 'not_found'
             || ($connection_status // '') eq 'excluded_connected';
         next if !$should_print;
-        next if !$options->{all} && $printed_author_ids{$author_id};
+        next if !$options->{all} && exists $printed_author_ids{$author_id};
 
         printf(
             "%-10s %-35s %-30s %-15s\t%s\n",
