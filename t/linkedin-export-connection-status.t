@@ -69,7 +69,7 @@ my $stdout = '';
 }
 
 my @lines = split /\n/, $stdout;
-is scalar @lines, 2, 'by default prints header and only not_found rows';
+is scalar @lines, 2, 'by default prints header and only not_found row';
 
 is(
     $lines[0],
