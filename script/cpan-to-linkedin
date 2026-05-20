@@ -172,12 +172,14 @@ sub first_linkedin_profile_url {
     my ($html) = @_;
     return unless defined $html;
 
+    my $profile_path = qr{(?:[A-Za-z0-9._\-]|%[0-9A-Fa-f]{2})+};
+
     while ($html =~ /uddg=([^"&]+)/g) {
         my $candidate = _url_decode($1);
-        return $candidate if $candidate =~ m{^https?://(?:www\.)?linkedin\.com/in/[A-Za-z0-9%._\-]+/?$};
+        return $candidate if $candidate =~ m{^https?://(?:www\.)?linkedin\.com/in/$profile_path/?$};
     }
 
-    while ($html =~ m{https?://(?:www\.)?linkedin\.com/in/[A-Za-z0-9%._\-]+/?}g) {
+    while ($html =~ m{https?://(?:www\.)?linkedin\.com/in/$profile_path/?(?![A-Za-z0-9._%\-])}g) {
         my $candidate = $&;
         $candidate =~ s/&amp;/&/g;
         return $candidate;

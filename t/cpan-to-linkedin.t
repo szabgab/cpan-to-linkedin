@@ -68,6 +68,13 @@ is(
     'finds LinkedIn URL in wrapped DuckDuckGo result',
 );
 
+ok(
+    !defined App::CPANToLinkedIn::first_linkedin_profile_url(
+        q{<a href="https://www.linkedin.com/in/bad%zzprofile/">Bad</a>}
+    ),
+    'rejects malformed percent-encoded LinkedIn profile URL',
+);
+
 is(
     App::CPANToLinkedIn::connection_status_from_search_html(
         q{<span>1st</span>}
