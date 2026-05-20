@@ -2,6 +2,8 @@
 
 `script/cpan-to-linkedin` fetches the authors of the most recent CPAN releases
 from MetaCPAN and tries to find matching LinkedIn profiles.
+By default it only prints entries whose `connection_status` is `not_found`.
+Use `--all` to print every processed result.
 
 ## Usage
 
@@ -9,6 +11,7 @@ from MetaCPAN and tries to find matching LinkedIn profiles.
 perl script/cpan-to-linkedin
 perl script/cpan-to-linkedin --count 50
 perl script/cpan-to-linkedin --count 50 --linkedin-export ~/linkedin-export
+perl script/cpan-to-linkedin --count 50 --all --linkedin-export ~/linkedin-export
 perl script/cpan-to-linkedin --count 50 --linkedin-cookie-file ~/.linkedin-cookie
 ```
 
