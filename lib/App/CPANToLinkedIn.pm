@@ -162,12 +162,8 @@ sub load_excluded_pause_ids {
     my $csv = Text::CSV->new({ binary => 1 });
     my %excluded;
 
-    while (my $line = <$fh>) {
-        chomp $line;
-        next if $line =~ /^\s*$/;
-        next unless $csv->parse($line);
-        my @fields = $csv->fields();
-        my $author_id = uc($fields[0] // '');
+    while (my $fields = $csv->getline($fh)) {
+        my $author_id = uc($fields->[0] // '');
         next if !$author_id;
         $excluded{$author_id} = 1;
     }
