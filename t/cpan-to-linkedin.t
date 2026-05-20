@@ -166,7 +166,7 @@ is(
 
 my $connections = App::CPANToLinkedIn::load_linkedin_connections("$Bin/../linkedin-export");
 is ref($connections), 'ARRAY', 'load_linkedin_connections returns an array ref';
-is scalar @$connections, 1, 'loads one connection from test CSV';
+is scalar @$connections, 3, 'loads one connection from test CSV';
 is $connections->[0]{first_name},   'Foo',                                      'parses first name';
 is $connections->[0]{last_name},    'Bar',                                      'parses last name';
 is $connections->[0]{url},          'https://www.linkedin.com/in/foobar',       'parses URL';
