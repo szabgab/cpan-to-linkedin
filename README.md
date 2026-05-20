@@ -34,6 +34,10 @@ Without authentication `connection_status` is reported as `unknown`. To inspect
 connection status, pass a raw LinkedIn `Cookie` header with `--linkedin-cookie`,
 `--linkedin-cookie-file`, or the `LINKEDIN_COOKIE` environment variable.
 
+To skip specific PAUSE IDs entirely, create an optional `exclude.csv` file in
+the current working directory. The first column is interpreted as the PAUSE ID;
+other columns are ignored.
+
 ## Dependencies
 
 The script uses `MetaCPAN::Client` for MetaCPAN queries and `Text::CSV` for

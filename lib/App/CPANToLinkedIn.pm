@@ -122,6 +122,7 @@ sub run {
 
     my $releases = fetch_recent_releases($mcpan, $options->{count});
     my %author_cache;
+    my $excluded_author_ids = load_excluded_pause_ids('exclude.csv');
 
     print join(
         "\t",
@@ -133,7 +134,9 @@ sub run {
         my $author_name = $author_cache{$author_id} ||= fetch_author_name($mcpan, $author_id);
         my ($profile_url, $connection_status);
 
-        if ($options->{linkedin_export}) {
+        if ($excluded_author_ids->{$author_id}) {
+            $connection_status = 'excluded';
+        } elsif ($options->{linkedin_export}) {
             my $entry = $connections_by_name{lc($author_name || '')};
             if ($entry && $entry->{url}) {
                 $profile_url       = $entry->{url};
@@ -170,6 +173,30 @@ sub run {
     }
 
     return 0;
+}
+
+sub load_excluded_pause_ids {
+    my ($file) = @_;
+    return {} if !$file || !-e $file;
+
+    open my $fh, '<:encoding(UTF-8)', $file
+        or die "Could not open $file: $!\n";
+
+    my $csv = Text::CSV->new({ binary => 1 });
+    my %excluded;
+
+    while (my $line = <$fh>) {
+        chomp $line;
+        next if $line =~ /^\s*$/;
+        next unless $csv->parse($line);
+        my @fields = $csv->fields();
+        my $author_id = uc($fields[0] // '');
+        next if !$author_id;
+        $excluded{$author_id} = 1;
+    }
+
+    close $fh;
+    return \%excluded;
 }
 
 sub create_metacpan_client {
