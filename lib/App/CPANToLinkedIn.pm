@@ -115,20 +115,13 @@ sub run {
     );
     my $mcpan = create_metacpan_client();
 
-    my %connections_by_name;
-    if ($options->{linkedin_export}) {
-        my $connections = load_linkedin_connections($options->{linkedin_export});
-        for my $c (@$connections) {
-            my $name = _normalized_name_key(
-                join(' ', grep { length $_ } $c->{first_name}, $c->{last_name})
-            );
-            $connections_by_name{$name} = $c if $name;
-        }
-    }
+    my %connections_by_name = $options->{linkedin_export}
+        ? _build_connections_index($options->{linkedin_export})
+        : ();
 
-    my $releases = fetch_recent_releases($mcpan, $options->{count});
-    my %author_cache;
+    my $releases            = fetch_recent_releases($mcpan, $options->{count});
     my $excluded_author_ids = load_excluded_pause_ids('exclude.csv');
+    my %author_cache;
     my %unique_author_status;
     my %printed_author_ids;
 
@@ -143,58 +136,23 @@ sub run {
             warn "Empty author_id for distribution '" . ($release->{distribution} // '') . "', skipping\n";
             next;
         }
+
         my $author_name = $author_cache{$author_id} ||= fetch_author_name($mcpan, $author_id);
-        my ($profile_url, $connection_status);
 
-        if ($excluded_author_ids->{$author_id}) {
-            if ($options->{linkedin_export}) {
-                my $entry = $connections_by_name{_normalized_name_key($author_name)};
-                if ($entry && $entry->{url}) {
-                    $profile_url       = $entry->{url};
-                    $connection_status = 'excluded_connected';
-                } else {
-                    $connection_status = 'excluded';
-                }
-            } else {
-                $connection_status = 'excluded';
-            }
-        } elsif ($options->{linkedin_export}) {
-            my $entry = $connections_by_name{_normalized_name_key($author_name)};
-            if ($entry && $entry->{url}) {
-                $profile_url       = $entry->{url};
-                $connection_status = 'connected';
-            } else {
-                $connection_status = 'not_found';
-            }
-        } else {
-            my $search_html = fetch_linkedin_search_html(
-                $http,
-                $author_name || $author_id,
-                $options->{cookie_header},
-            );
-            $profile_url = first_linkedin_profile_url($search_html);
-            $connection_status = 'not_found';
-
-            if ($profile_url) {
-                $connection_status = $options->{cookie_header}
-                    ? connection_status_from_search_html($search_html)
-                    : 'unknown';
-            }
-        }
+        my ($profile_url, $connection_status) = _resolve_connection_status(
+            $author_id, $author_name, $excluded_author_ids, \%connections_by_name, $options, $http,
+        );
 
         if (($connection_status // '') eq 'not_found') {
             $profile_url = linkedin_search_url($author_name || $author_id);
         }
 
         my $author_key = "id:$author_id";
-        if (!exists $unique_author_status{$author_key}) {
-            $unique_author_status{$author_key} = $connection_status // '';
-        }
+        $unique_author_status{$author_key} //= ($connection_status // '');
 
-        my $should_print = $options->{all}
+        next unless $options->{all}
             || ($connection_status // '') eq 'not_found'
             || ($connection_status // '') eq 'excluded_connected';
-        next if !$should_print;
         next if !$options->{all} && exists $printed_author_ids{$author_id};
 
         printf(
@@ -208,23 +166,7 @@ sub run {
         $printed_author_ids{$author_id} = 1;
     }
 
-    my %status_counts;
-    for my $status (values %unique_author_status) {
-        $status_counts{$status}++;
-    }
-
-    print "Total entries: " . scalar(@{$releases}) . "\n";
-    print "Unique authors: " . scalar(keys %unique_author_status) . "\n";
-
-    my %printed_status;
-    for my $status (qw(connected not_found excluded)) {
-        print "  $status: " . ($status_counts{$status} // 0) . "\n";
-        $printed_status{$status} = 1;
-    }
-    for my $status (sort grep { !$printed_status{$_} } keys %status_counts) {
-        print "  $status: $status_counts{$status}\n";
-    }
-
+    _print_summary($releases, \%unique_author_status);
     return 0;
 }
 
@@ -411,6 +353,72 @@ sub _cookie_header {
     }
 
     return $ENV{LINKEDIN_COOKIE} || '';
+}
+
+sub _build_connections_index {
+    my ($export_dir) = @_;
+    my $connections = load_linkedin_connections($export_dir);
+    my %index;
+    for my $c (@$connections) {
+        my $name = _normalized_name_key(
+            join(' ', grep { length $_ } $c->{first_name}, $c->{last_name})
+        );
+        $index{$name} = $c if $name;
+    }
+    return %index;
+}
+
+sub _lookup_in_export {
+    my ($connections_by_name, $author_name) = @_;
+    my $entry = $connections_by_name->{ _normalized_name_key($author_name) };
+    return ($entry && $entry->{url}) ? $entry->{url} : undef;
+}
+
+sub _resolve_connection_status {
+    my ($author_id, $author_name, $excluded_ids, $connections_by_name, $options, $http) = @_;
+
+    if ($excluded_ids->{$author_id}) {
+        my $url = $options->{linkedin_export}
+            ? _lookup_in_export($connections_by_name, $author_name)
+            : undef;
+        return ($url, $url ? 'excluded_connected' : 'excluded');
+    }
+
+    if ($options->{linkedin_export}) {
+        my $url = _lookup_in_export($connections_by_name, $author_name);
+        return ($url, $url ? 'connected' : 'not_found');
+    }
+
+    # LinkedIn search mode
+    my $search_html = fetch_linkedin_search_html(
+        $http,
+        $author_name || $author_id,
+        $options->{cookie_header},
+    );
+    my $profile_url       = first_linkedin_profile_url($search_html);
+    my $connection_status = !$profile_url            ? 'not_found'
+                          : $options->{cookie_header} ? connection_status_from_search_html($search_html)
+                          :                             'unknown';
+    return ($profile_url, $connection_status);
+}
+
+sub _print_summary {
+    my ($releases, $unique_author_status) = @_;
+
+    my %status_counts;
+    $status_counts{$_}++ for values %$unique_author_status;
+
+    print "Total entries: "  . scalar(@$releases) . "\n";
+    print "Unique authors: " . scalar(keys %$unique_author_status) . "\n";
+
+    my %printed_status;
+    for my $status (qw(connected not_found excluded)) {
+        print "  $status: " . ($status_counts{$status} // 0) . "\n";
+        $printed_status{$status} = 1;
+    }
+    for my $status (sort grep { !$printed_status{$_} } keys %status_counts) {
+        print "  $status: $status_counts{$status}\n";
+    }
 }
 
 sub _url_encode {
