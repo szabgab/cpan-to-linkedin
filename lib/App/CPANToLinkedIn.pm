@@ -21,6 +21,7 @@ our @EXPORT_OK = qw(
     run
 );
 
+
 sub parse_args {
     my (@argv) = @_;
 
@@ -98,6 +99,7 @@ END_USAGE
 
 sub run {
     my (@argv) = @_;
+    binmode(STDOUT, ":utf8");
     my $options = parse_args(@argv);
 
     if ($options->{help}) {
@@ -182,6 +184,7 @@ sub load_excluded_pause_ids {
 
     while (my $fields = $csv->getline($fh)) {
         my $author_id = $fields->[0] // '';
+        next if $author_id =~ /^#/;
         $author_id =~ s/^\s+|\s+\z//g;
         $author_id = uc($author_id);
         next if !$author_id;
